@@ -1,0 +1,573 @@
+import requests
+from woocommerce import API
+import logging
+import math
+
+# Konfiguracja logowania
+logging.basicConfig(
+    filename="dropshipping.log",
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
+
+class SupplierAPI:
+    """Klasa do obsługi API dostawcy."""
+    def __init__(self, api_url, api_key):
+        self.api_url = api_url
+        self.api_key = api_key
+
+    def fetch_products(self):
+        """Pobieranie produktów od dostawcy."""
+        try:
+            headers = {"Authorization": f"Bearer {self.api_key}"}
+            response = requests.get(self.api_url, headers=headers)
+            response.raise_for_status()
+            logging.info("Pobrano produkty od dostawcy.")
+            return response.json()
+        except requests.RequestException as e:
+            logging.error(f"Błąd podczas pobierania produktów: {e}")
+            return []
+
+class WooCommerceAPI:
+    """Klasa do zarządzania WooCommerce."""
+    def __init__(self, url, consumer_key, consumer_secret):
+        self.wcapi = API(
+            url=url,
+            consumer_key=consumer_key,
+            consumer_secret=consumer_secret,
+            version="wc/v3"
+        )
+
+    def get_product_by_sku(self, sku):
+        """Sprawdzenie, czy produkt istnieje na podstawie SKU."""
+        try:
+            response = self.wcapi.get("products", params={"sku": sku})
+            if response.status_code == 200:
+                products = response.json()
+                return products[0] if products else None
+        except Exception as e:
+            logging.error(f"Błąd podczas sprawdzania SKU {sku}: {e}")
+        return None
+
+    def create_product(self, product_data):
+        """Tworzenie nowego produktu."""
+        try:
+            response = self.wcapi.post("products", product_data)
+            if response.status_code == 201:
+                logging.info(f"Utworzono produkt: {product_data['name']}")
+                return response.json()
+        except Exception as e:
+            logging.error(f"Błąd podczas tworzenia produktu {product_data['name']}: {e}")
+        return None
+
+    def update_product(self, product_id, product_data):
+        """Aktualizacja istniejącego produktu."""
+        try:
+            response = self.wcapi.put(f"products/{product_id}", product_data)
+            if response.status_code == 200:
+                logging.info(f"Zaktualizowano produkt ID {product_id}")
+                return response.json()
+        except Exception as e:
+            logging.error(f"Błąd podczas aktualizacji produktu ID {product_id}: {e}")
+        return None
+
+class ProductManager:
+    """Klasa do zarządzania produktami i synchronizacją."""
+    def __init__(self, supplier_api, woocommerce_api):
+        self.supplier_api = supplier_api
+        self.woocommerce_api = woocommerce_api
+
+    def calculate_price(self, base_price):
+        """Dynamiczna kalkulacja ceny z marżą."""
+        if base_price < 50:
+            return round(base_price * 1.3, 2)  # Marża 30% dla tanich produktów
+        elif base_price < 200:
+            return round(base_price * 1.2, 2)  # Marża 20% dla średnich
+        else:
+            return round(base_price * 1.15, 2)  # Marża 15% dla drogich produktów
+
+    def sync_products(self):
+        """Synchronizacja produktów między dostawcą a WooCommerce."""
+        products = self.supplier_api.fetch_products()
+        for product in products:
+            try:
+                # Przetwarzanie danych produktu
+                wc_product = self.woocommerce_api.get_product_by_sku(product["sku"])
+                price = self.calculate_price(product["price"])
+                product_data = {
+                    "name": product["name"],
+                    "type": "simple",
+                    "regular_price": str(price),
+                    "description": product["description"],
+                    "sku": product["sku"],
+                    "stock_quantity": product["stock"],
+                    "categories": [{"id": product.get("category_id", 1)}],
+                    "images": [{"src": img} for img in product["images"]],
+                }
+
+                if wc_product:
+                    # Aktualizacja istniejącego produktu
+                    self.woocommerce_api.update_product(wc_product["id"], product_data)
+                else:
+                    # Tworzenie nowego produktu
+                    self.woocommerce_api.create_product(product_data)
+
+            except Exception as e:
+                logging.error(f"Błąd podczas przetwarzania produktu {product['name']}: {e}")
+
+# Główna funkcja
+def main():
+    # Konfiguracja API
+    supplier_api = SupplierAPI(
+        api_url="https://api.dostawca.com/products",
+        api_key="TWÓJ_KLUCZ_API"
+    )
+    woocommerce_api = WooCommerceAPI(
+        url="https://twoj-sklep.pl",
+        consumer_key="KLIENT_API",
+        consumer_secret="TAJNY_KLUCZ"
+    )
+    
+    # Synchronizacja produktów
+    product_manager = ProductManager(supplier_api, woocommerce_api)
+    product_manager.sync_products()
+
+if __name__ == "__main__":
+    main()
+    
+    import requests
+from woocommerce import API
+import logging
+
+# Konfiguracja logowania
+logging.basicConfig(
+    filename="dropshipping.log",
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
+
+class SupplierAPI:
+    """Klasa do obsługi API dostawcy."""
+    def __init__(self, api_url, api_key):
+        self.api_url = api_url
+        self.api_key = api_key
+
+    def fetch_products(self):
+        """Pobieranie produktów od dostawcy."""
+        try:
+            headers = {"Authorization": f"Bearer {self.api_key}"}
+            response = requests.get(self.api_url, headers=headers)
+            response.raise_for_status()
+            logging.info("Pobrano produkty od dostawcy.")
+            return response.json()
+        except requests.RequestException as e:
+            logging.error(f"Błąd podczas pobierania produktów: {e}")
+            return []
+
+class TranslationAPI:
+    """Klasa do obsługi API tłumaczeń."""
+    def __init__(self, api_key, base_url="https://api-free.deepl.com/v2/translate"):
+        self.api_key = api_key
+        self.base_url = base_url
+
+    def translate_text(self, text, target_lang):
+        """Tłumaczenie tekstu na określony język."""
+        try:
+            data = {
+                "auth_key": self.api_key,
+                "text": text,
+                "target_lang": target_lang
+            }
+            response = requests.post(self.base_url, data=data)
+            response.raise_for_status()
+            translated_text = response.json()["translations"][0]["text"]
+            return translated_text
+        except Exception as e:
+            logging.error(f"Błąd tłumaczenia tekstu: {e}")
+            return text
+
+class WooCommerceAPI:
+    """Klasa do zarządzania WooCommerce."""
+    def __init__(self, url, consumer_key, consumer_secret):
+        self.wcapi = API(
+            url=url,
+            consumer_key=consumer_key,
+            consumer_secret=consumer_secret,
+            version="wc/v3"
+        )
+
+    def get_product_by_sku(self, sku):
+        """Sprawdzenie, czy produkt istnieje na podstawie SKU."""
+        try:
+            response = self.wcapi.get("products", params={"sku": sku})
+            if response.status_code == 200:
+                products = response.json()
+                return products[0] if products else None
+        except Exception as e:
+            logging.error(f"Błąd podczas sprawdzania SKU {sku}: {e}")
+        return None
+
+    def create_product(self, product_data):
+        """Tworzenie nowego produktu."""
+        try:
+            response = self.wcapi.post("products", product_data)
+            if response.status_code == 201:
+                logging.info(f"Utworzono produkt: {product_data['name']}")
+                return response.json()
+        except Exception as e:
+            logging.error(f"Błąd podczas tworzenia produktu {product_data['name']}: {e}")
+        return None
+
+    def update_product(self, product_id, product_data):
+        """Aktualizacja istniejącego produktu."""
+        try:
+            response = self.wcapi.put(f"products/{product_id}", product_data)
+            if response.status_code == 200:
+                logging.info(f"Zaktualizowano produkt ID {product_id}")
+                return response.json()
+        except Exception as e:
+            logging.error(f"Błąd podczas aktualizacji produktu ID {product_id}: {e}")
+        return None
+
+class ProductManager:
+    """Klasa do zarządzania produktami i synchronizacją."""
+    def __init__(self, supplier_api, woocommerce_api, translation_api, languages):
+        self.supplier_api = supplier_api
+        self.woocommerce_api = woocommerce_api
+        self.translation_api = translation_api
+        self.languages = languages
+
+    def translate_product(self, product, language):
+        """Tłumaczenie danych produktu na wskazany język."""
+        translated_name = self.translation_api.translate_text(product["name"], language)
+        translated_description = self.translation_api.translate_text(product["description"], language)
+        return {
+            "name": translated_name,
+            "description": translated_description
+        }
+
+    def sync_products(self):
+        """Synchronizacja produktów między dostawcą a WooCommerce."""
+        products = self.supplier_api.fetch_products()
+        for product in products:
+            try:
+                # Przetwarzanie danych produktu
+                wc_product = self.woocommerce_api.get_product_by_sku(product["sku"])
+                for lang in self.languages:
+                    translated_product = self.translate_product(product, lang)
+                    product_data = {
+                        "name": translated_product["name"],
+                        "type": "simple",
+                        "regular_price": str(product["price"]),
+                        "description": translated_product["description"],
+                        "sku": f"{product['sku']}-{lang}",  # SKU z kodem języka
+                        "stock_quantity": product["stock"],
+                        "categories": [{"id": product.get("category_id", 1)}],
+                        "images": [{"src": img} for img in product["images"]],
+                        "meta_data": [{"key": "language", "value": lang}],  # Informacja o języku
+                    }
+
+                    if wc_product:
+                        # Aktualizacja istniejącego produktu
+                        self.woocommerce_api.update_product(wc_product["id"], product_data)
+                    else:
+                        # Tworzenie nowego produktu
+                        self.woocommerce_api.create_product(product_data)
+
+            except Exception as e:
+                logging.error(f"Błąd podczas przetwarzania produktu {product['name']}: {e}")
+
+# Główna funkcja
+def main():
+    # Konfiguracja API
+    supplier_api = SupplierAPI(
+        api_url="https://api.dostawca.com/products",
+        api_key="TWÓJ_KLUCZ_API"
+    )
+    translation_api = TranslationAPI(
+        api_key="TWÓJ_KLUCZ_DEEPL"
+    )
+    woocommerce_api = WooCommerceAPI(
+        url="https://twoj-sklep.pl",
+        consumer_key="KLIENT_API",
+        consumer_secret="TAJNY_KLUCZ"
+    )
+    
+    # Języki do tłumaczeń
+    languages = ["EN", "DE", "FR", "ES", "PL"]  # Angielski, Niemiecki, Francuski, Hiszpański, Polski
+    
+    # Synchronizacja produktów
+    product_manager = ProductManager(supplier_api, woocommerce_api, translation_api, languages)
+    product_manager.sync_products()
+
+if __name__ == "__main__":
+    main()
+
+    import requests
+import logging
+
+class TranslationAPI:
+    def __init__(self, api_key, base_url="https://api-free.deepl.com/v2/translate"):
+        self.api_key = api_key
+        self.base_url = base_url
+
+    def translate_product(self, product, lang):
+        """Tłumaczenie produktu na określony język."""
+        try:
+            data = {
+                "auth_key": self.api_key,
+                "text": product["name"],
+                "target_lang": lang
+            }
+            name_translation = requests.post(self.base_url, data=data).json()["translations"][0]["text"]
+
+            data["text"] = product["description"]
+            description_translation = requests.post(self.base_url, data=data).json()["translations"][0]["text"]
+
+            return {
+                "name": name_translation,
+                "description": description_translation,
+                "sku": product["sku"],
+                "price": product["price"],
+                "stock": product["stock"]
+            }
+        except Exception as e:
+            logging.error(f"Błąd podczas tłumaczenia produktu: {e}")
+            return product
+Zarządzanie cenami: price_manager.py
+python
+Skopiuj kod
+import logging
+
+class PriceManager:
+    def __init__(self, pricing_config, woocommerce_api):
+        self.base_margin = pricing_config["base_margin"]
+        self.dynamic_pricing = pricing_config["dynamic_pricing"]
+        self.woocommerce_api = woocommerce_api
+
+    def calculate_price(self, base_price):
+        """Obliczanie ceny z marżą."""
+        return base_price + (base_price * self.base_margin / 100)
+
+    def update_product_price(self, product):
+        """Aktualizacja ceny produktu."""
+        try:
+            new_price = self.calculate_price(product["price"])
+            # Opcjonalnie: dynamiczna analiza konkurencji
+            if self.dynamic_pricing:
+                competitor_price = self.get_competitor_price(product["sku"])
+                if competitor_price:
+                    new_price = min(new_price, competitor_price)
+
+            self.woocommerce_api.update_product_price(product["sku"], new_price)
+            logging.info(f"Zaktualizowano cenę produktu {product['sku']}: {new_price}")
+        except Exception as e:
+            logging.error(f"Błąd podczas aktualizacji ceny {product['sku']}: {e}")
+
+    def get_competitor_price(self, sku):
+        """Pobieranie ceny od konkurencji (przykład)."""
+        return None  # Zaimplementuj integrację z API konkurencji
+
+
+
+        import logging
+import yaml
+from supplier_api import SupplierAPI
+from translation_api import TranslationAPI
+from woocommerce_api import WooCommerceAPI
+from price_manager import PriceManager
+from inventory_manager import InventoryManager
+from notification_system import NotificationSystem
+
+# Konfiguracja logowania
+logging.basicConfig(
+    filename="dropshipping.log",
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
+
+def load_config():
+    """Ładowanie konfiguracji z pliku YAML."""
+    with open("config.yaml", "r") as file:
+        return yaml.safe_load(file)
+
+def main():
+    # Ładowanie konfiguracji
+    config = load_config()
+
+    # Inicjalizacja modułów
+    supplier_api = SupplierAPI(config["supplier"]["api_url"], config["supplier"]["api_key"])
+    translation_api = TranslationAPI(config["translation"]["api_key"])
+    woocommerce_api = WooCommerceAPI(
+        config["woocommerce"]["url"],
+        config["woocommerce"]["consumer_key"],
+        config["woocommerce"]["consumer_secret"]
+    )
+    price_manager = PriceManager(config["pricing"], woocommerce_api)
+    inventory_manager = InventoryManager(config["inventory"], woocommerce_api)
+    notification_system = NotificationSystem(config["notifications"])
+
+    # Synchronizacja produktów
+    products = supplier_api.fetch_products()
+    for product in products:
+        # Tłumaczenie i synchronizacja
+        for lang in config["languages"]:
+            translated_product = translation_api.translate_product(product, lang)
+            woocommerce_api.sync_product(translated_product, lang)
+
+        # Zarządzanie cenami
+        price_manager.update_product_price(product)
+
+    # Zarządzanie stanem magazynowym
+    inventory_manager.check_stock_levels(products)
+
+    # Powiadomienia
+    notification_system.send_report()
+
+if __name__ == "__main__":
+    main()
+
+
+    import requests
+import logging
+
+class SupplierMonitoring:
+    def __init__(self, supplier_config):
+        self.api_url = supplier_config["api_url"]
+        self.api_key = supplier_config["api_key"]
+
+    def fetch_products(self):
+        """Pobiera produkty od dostawcy."""
+        try:
+            headers = {"Authorization": f"Bearer {self.api_key}"}
+            response = requests.get(self.api_url, headers=headers)
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as e:
+            logging.error(f"Błąd podczas pobierania danych od dostawcy: {e}")
+            return []
+
+    def check_availability(self, products):
+        """Sprawdza dostępność produktów."""
+        unavailable = [p for p in products if p["stock"] <= 0]
+        logging.info(f"Liczba niedostępnych produktów: {len(unavailable)}")
+        return unavailable
+
+        import requests
+import logging
+
+class PriceAnalysis:
+    def __init__(self, competitor_api_url):
+        self.competitor_api_url = competitor_api_url
+
+    def fetch_competitor_prices(self, product_sku):
+        """Pobiera ceny konkurencji dla danego produktu."""
+        try:
+            response = requests.get(f"{self.competitor_api_url}?sku={product_sku}")
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as e:
+            logging.error(f"Błąd podczas pobierania danych o cenach konkurencji: {e}")
+            return {}
+
+    def analyze_and_adjust_price(self, product, current_price):
+        """Analizuje ceny konkurencji i dostosowuje cenę."""
+        competitor_prices = self.fetch_competitor_prices(product["sku"])
+        if competitor_prices:
+            min_price = min([p["price"] for p in competitor_prices])
+            if min_price < current_price:
+                logging.info(f"Obniżenie ceny dla {product['name']} z {current_price} do {min_price}")
+                return min_price
+        return current_price
+        class LoyaltySystem:
+    def __init__(self, base_points_rate=1):
+        """Inicjalizuje system lojalnościowy."""
+        self.base_points_rate = base_points_rate
+        self.customers = {}
+
+    def add_purchase(self, customer_id, purchase_amount):
+        """Dodaje punkty lojalnościowe za zakupy."""
+        points = purchase_amount * self.base_points_rate
+        if customer_id not in self.customers:
+            self.customers[customer_id] = 0
+        self.customers[customer_id] += points
+        return points
+
+    def get_points_balance(self, customer_id):
+        """Zwraca saldo punktów lojalnościowych klienta."""
+        return self.customers.get(customer_id, 0)
+
+    def redeem_points(self, customer_id, points_to_redeem):
+        """Realizuje punkty na rabaty."""
+        if self.customers.get(customer_id, 0) >= points_to_redeem:
+            self.customers[customer_id] -= points_to_redeem
+            return True
+        return False
+        import smtplib
+from email.mime.text import MIMEText
+import logging
+
+class NotificationSystem:
+    def __init__(self, email_config):
+        self.smtp_server = email_config["smtp_server"]
+        self.port = email_config["port"]
+        self.username = email_config["username"]
+        self.password = email_config["password"]
+
+    def send_email(self, to_email, subject, message):
+        """Wysyła e-mail z raportem."""
+        try:
+            msg = MIMEText(message)
+            msg["Subject"] = subject
+            msg["From"] = self.username
+            msg["To"] = to_email
+
+            with smtplib.SMTP(self.smtp_server, self.port) as server:
+                server.starttls()
+                server.login(self.username, self.password)
+                server.send_message(msg)
+            logging.info("Wysłano powiadomienie e-mail.")
+        except Exception as e:
+            logging.error(f"Błąd podczas wysyłania e-maila: {e}")
+import logging
+import yaml
+from modules.supplier_monitoring import SupplierMonitoring
+from modules.price_analysis import PriceAnalysis
+from modules.loyalty_system import LoyaltySystem
+from modules.notifications import NotificationSystem
+
+def load_config():
+    with open("config.yaml", "r") as file:
+        return yaml.safe_load(file)
+
+def main():
+    logging.basicConfig(level=logging.INFO)
+    config = load_config()
+
+    # Moduły
+    supplier_monitoring = SupplierMonitoring(config["supplier"])
+    price_analysis = PriceAnalysis(config["pricing"]["competitor_api"])
+    loyalty_system = LoyaltySystem()
+    notifications = NotificationSystem(config["notifications"]["email"])
+
+    # 1. Monitoring dostawców
+    products = supplier_monitoring.fetch_products()
+    unavailable_products = supplier_monitoring.check_availability(products)
+
+    # 2. Analiza cen konkurencji
+    for product in products:
+        current_price = product["price"]
+        new_price = price_analysis.analyze_and_adjust_price(product, current_price)
+        if new_price != current_price:
+            logging.info(f"Aktualizacja ceny produktu {product['sku']} na {new_price}")
+
+    # 3. Dodanie punktów lojalnościowych
+    points = loyalty_system.add_purchase("customer123", 100)
+    logging.info(f"Dodano {points} punktów lojalnościowych.")
+
+    # 4. Wysyłanie raportu
+    report = f"Liczba niedostępnych produktów: {len(unavailable_products)}\n"
+    notifications.send_email("admin@sklep.pl", "Raport dropshipping", report)
+
+if __name__ == "__main__":
+    main()
